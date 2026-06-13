@@ -1293,6 +1293,11 @@
   }
   .auth-submit:hover { background: var(--navy-dark); }
   .auth-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+  .auth-escape { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--border); text-align: center; }
+  .auth-guest-btn { width: 100%; background: transparent; color: var(--metal); border: 1px solid rgba(130,207,197,0.35); padding: 11px; border-radius: 8px; font-size: 13.5px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .auth-guest-btn:hover { background: rgba(130,207,197,0.08); }
+  .auth-home-link { display: inline-block; margin-top: 14px; color: var(--text-mute); font-size: 13px; cursor: pointer; }
+  .auth-home-link:hover { color: var(--bone); }
   .auth-config-warning {
     background: rgba(224,169,59,0.12); color: #E6BE6A;
     border: 1px solid rgba(224,169,59,0.30);
@@ -1523,6 +1528,10 @@
       <div class="auth-info" id="authInfo"></div>
       <button class="auth-submit" id="authSubmitBtn" type="submit">Sign in</button>
     </form>
+    <div class="auth-escape">
+      <button type="button" class="auth-guest-btn" onclick="continueAsGuest()">Continue as guest — just exploring →</button>
+      <a class="auth-home-link" onclick="lpBackHome()">← Back to home</a>
+    </div>
   </div>
 </div>
 
@@ -6951,7 +6960,7 @@ function injectGuestBanner() {
   const c = document.getElementById("content"); if (!c || c.querySelector(".guest-banner")) return;
   const b = document.createElement("div");
   b.className = "guest-banner";
-  b.innerHTML = `<span>👋 You're exploring as a guest — sign in to save progress, earn certificates, and post in the community.</span><button onclick="promptSignup()">Start free</button>`;
+  b.innerHTML = `<span>👋 You're exploring as a guest — <a onclick="promptSignin()" style="color:var(--metal);cursor:pointer;font-weight:600;">sign in</a> or create an account to save progress, earn certificates, and post in the community.</span><button onclick="promptSignup()">Start free</button>`;
   c.insertBefore(b, c.firstChild);
 }
 
@@ -7517,7 +7526,7 @@ document.getElementById("importFile").addEventListener("change", e => {
 
 // ============== INITIAL BOOT ==============
 // ============== LANDING (editorial) ==============
-let pendingView = null, pendingCourse = null;
+let pendingView = null, pendingCourse = null, pendingAuth = false;
 
 window.lpScrollTo = function(id) {
   const el = document.getElementById(id);
@@ -7535,6 +7544,7 @@ window.lpEnter = function(target) {
       const nf = document.getElementById("nameField"); if (nf) nf.style.display = target === "signup" ? "block" : "none";
       const sb2 = document.getElementById("authSubmitBtn"); if (sb2) sb2.textContent = target === "signup" ? "Create account" : "Sign in";
     }
+    pendingAuth = true;
     bootApp();
   } else {
     const map = { app: "dashboard", stack: "stack-builder", bootcamp: "bootcamp",
@@ -7576,12 +7586,13 @@ async function bootApp() {
       if (ok) { isGuest = false; updateProfileUI(); loggedIn = true; }
     }
     if (!loggedIn) {
-      if (pendingView || pendingCourse) { isGuest = true; hideAuthScreen(); }
-      else { showAuthScreen(); }
+      // Never trap the visitor. Only show the wall when they explicitly chose to sign in.
+      if (pendingAuth) { pendingAuth = false; showAuthScreen(); }
+      else { isGuest = true; hideAuthScreen(); if (!pendingView && !pendingCourse) state.view = state.view || "dashboard"; }
     }
   } catch (e) {
-    if (pendingView || pendingCourse) { isGuest = true; hideAuthScreen(); }
-    else { showAuthScreen(); }
+    if (pendingAuth) { pendingAuth = false; showAuthScreen(); }
+    else { isGuest = true; hideAuthScreen(); if (!pendingView && !pendingCourse) state.view = state.view || "dashboard"; }
   }
 
   // Honor a destination chosen from the landing page
@@ -7611,6 +7622,14 @@ function promptSignup() {
   const nf = document.getElementById("nameField"); if (nf) nf.style.display = "block";
   const sbtn = document.getElementById("authSubmitBtn"); if (sbtn) sbtn.textContent = "Create account";
 }
+function promptSignin() {
+  if (typeof authMode !== "undefined") authMode = "signin";
+  showAuthScreen();
+  document.querySelectorAll(".auth-tab").forEach(t => t.classList.toggle("active", t.dataset.tab === "signin"));
+  const nf = document.getElementById("nameField"); if (nf) nf.style.display = "none";
+  const sbtn = document.getElementById("authSubmitBtn"); if (sbtn) sbtn.textContent = "Sign in";
+}
+window.promptSignin = promptSignin;
 function showWelcome() {
   if (sessionStorage.getItem("ai_lh_welcomed")) return;
   const o = document.getElementById("welcomeOverlay"); if (o) o.style.display = "flex";
@@ -7621,6 +7640,14 @@ function closeWelcome(go) {
   if (go) setView("bootcamp");
 }
 window.promptSignup = promptSignup; window.closeWelcome = closeWelcome;
+function continueAsGuest() {
+  isGuest = true;
+  try { sessionStorage.setItem("ai_lh_entered", "1"); } catch (e) {}
+  hideAuthScreen();
+  if (!state.view) state.view = "dashboard";
+  render();
+}
+window.continueAsGuest = continueAsGuest;
 
 // ============== NOTIFICATIONS (real, with read-state) ==============
 function getNotifications() {
